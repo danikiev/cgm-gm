@@ -39,6 +39,12 @@ def load_data(path, time_spec_converter, train_bs=32, test_bs=32, tcondvar=0):
         ridx = np.load(os.path.join(path, f'rand_idx_{loc}.npy'))
         if len(ridx) == data.shape[0]:
             data = data.iloc[ridx]
+    else:
+        # The authors' shuffle file is not in the public release. Without a shuffle the 80/20 split below would follow
+        # the file order, which is grouped by event, so training and test would share almost no events. Shuffle the
+        # recordings with a fixed seed instead: a random 80/20 split of the recordings, as described in the paper.
+        print(f'rand_idx_{loc}.npy not found: shuffling the recordings with seed 3407')
+        data = data.iloc[np.random.default_rng(3407).permutation(data.shape[0])]
 
     # assign names for the first 13 columns
     names = ["eid",    #"Event ID"
