@@ -1,0 +1,90 @@
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editors, OS
+.vscode/
+.idea/
+.DS_Store
+
+# AI coding agents: instructions, settings, caches and chat history stay local (not synced)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.mcp.json
+AGENTS.md
+.agent/
+.agents/
+.codex/
+GEMINI.md
+.gemini/
+QWEN.md
+.qwen/
+CRUSH.md
+.crush/
+.opencode/
+.cursor/
+.cursorrules
+.cursorignore
+.cursorindexingignore
+.windsurf/
+.windsurfrules
+.codeium/
+.aider*
+.continue/
+.clinerules
+.clineignore
+.roo/
+.roomodes
+.rooignore
+.kiro/
+.amazonq/
+.junie/
+.augment/
+.augment-guidelines
+.trae/
+.goosehints
+.openhands/
+.serena/
+.specstory/
+.cody/
+.github/copilot-instructions.md
+.github/instructions/
+.github/prompts/
+.github/chatmodes/
+
+# Experiment tracking (neptune offline/debug output)
+.neptune/
+
+# Training / evaluation outputs
+figures/
+logs/
+runs/
+gens/
+nohup.out
+*.log
+# checkpoints written by train_hyperopt.py have no file extension
+GM_V2_VAE_*
+*.pt
+*.pth
+*.ckpt
+
+# Datasets and generated arrays (download separately, see README "Data")
+data/
+*.csv
+*.npy
+*.npz
+*.h5
+*.hdf5
