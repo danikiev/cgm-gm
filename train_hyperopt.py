@@ -4,9 +4,11 @@ Train function
 
 import argparse
 import time
+import os, sys
+# non-interactive matplotlib backend so the plt.show() calls in eval_metrics never block a run
+os.environ.setdefault('MPLBACKEND', 'Agg')
 import neptune.new as neptune
 
-import os, sys
 import math
 
 import torch
@@ -103,7 +105,7 @@ def train(args, model, train_loader, run, norm_dict, time_spec_converter):
                 random_sampling=True,
                 device=args.device)
 
-            l, rec_loss, time_domain_l, kl_div, pgv_reg = loss(wfs, wfs_hat, z_post_mean, z_post_logvar, z_prior_mean, z_prior_logvar, beta, norm_dict, time_spec_converter, true_phase, time_domain_wfs, log_reg, alpha)
+            l, rec_loss, time_domain_l, kl_div = loss(wfs, wfs_hat, z_post_mean, z_post_logvar, z_prior_mean, z_prior_logvar, beta, norm_dict, time_spec_converter, true_phase, time_domain_wfs, log_reg, alpha)
 
             optimizer.zero_grad()
             l.backward()
@@ -333,8 +335,9 @@ def main(args, mc):
         args.epochs, args.batch_size, args.z_rnn_dim, args.z_dim, args.lr,
         args.beta, str(args.log_reg), args.weight_decay, args.w_len, args.h_len, args.ncond, args.tcondvar, args.seed)
 
-    os.makedirs(log_dir, exist_ok=True) 
-    log_path = os.path.join(log_dir, name)  
+    os.makedirs(log_dir, exist_ok=True)
+    os.makedirs('./figures', exist_ok=True)  # evaluation plots are saved to ./figures (relative to the working dir)
+    log_path = os.path.join(log_dir, name)
     args.log_path = log_path
 
     print(args)
@@ -354,8 +357,8 @@ def main(args, mc):
 
     # set-up neptune
     run = neptune.init_run(
-        project=YOUR_PROJECT_NAME, # your project name
-        api_token=YOUR_TOKEN, # use your own token
+        project=os.environ.get('NEPTUNE_PROJECT'),  # your project name (only needed for async/sync/offline modes)
+        api_token=os.environ.get('NEPTUNE_API_TOKEN'),  # use your own token
         tags=[args.tag],
         mode=args.neptune
     )  # your credentials
@@ -406,10 +409,14 @@ if __name__ == '__main__':
     parser.add_argument('--ncond', type=int, default=16, help='number of channels of conditional variables')
     parser.add_argument('--beta', type=float, default=1.0, help='penalty coefficient for reconstruction loss')
     parser.add_argument('--alpha', type=float, default=1.0, help='penalty coefficient for time domain loss') 
-    parser.add_argument('--neptune', default='async')
+    parser.add_argument('--neptune', default='debug',
+                        help='neptune mode: debug (no logging), offline, async, sync. The hosted neptune.ai service '
+                             'shut down in March 2026, so async/sync need a self-hosted server.')
     parser.add_argument('--tag', default='gm vae reg hlen')
     parser.add_argument('--log_reg', action='store_true')
     parser.add_argument('--tcondvar', default=2, type=int, help='loaded conditional variables: 0 - mag&dist&angle; 1 - mag&dist&angle&depth; 2 - mag&src-sta-coords&depth.')
+    parser.add_argument('--no_hyperopt', action='store_true',
+                        help='skip the hyperopt search and train once with the hyperparameters given on the command line')
 
     # audio args
     parser.add_argument('--w_len', type=int, default=160, help='window length')
@@ -436,12 +443,13 @@ if __name__ == '__main__':
 
         return space
 
-    rstate = np.random.default_rng(args.seed)
-    print(f'rstate: {rstate}')
-    trials = Trials()
-    fmin_objective = functools.partial(main, args)
-    space = get_experiment_space()
-    fmin(fmin_objective, space=space, algo=tpe.suggest, max_evals=30, trials=trials, verbose=True, rstate=rstate)
+    if not args.no_hyperopt:
+        rstate = np.random.default_rng(args.seed)
+        print(f'rstate: {rstate}')
+        trials = Trials()
+        fmin_objective = functools.partial(main, args)
+        space = get_experiment_space()
+        fmin(fmin_objective, space=space, algo=tpe.suggest, max_evals=30, trials=trials, verbose=True, rstate=rstate)
     
     # opt_params = {  # Architecture parameters
     #        'model': 'vae',
