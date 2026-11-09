@@ -42,7 +42,10 @@ def loss(X, X_hat, z_post_mean, z_post_logvar, z_prior_mean, z_prior_logvar, bet
     recons_loss = MSE_loss(X_hat, X) # log norm of amplitude
     
     # waveform loss
-    wfs_hat = min_max_norm(X_hat, wfs_min, wfs_max, '[0,1]', 'add')
+    # X_hat (linear decoder output) is unbounded and 10**x below turns an overshoot of d above the data maximum (1)
+    # into a 10**(d * ~10 decades) amplitude, i.e. an exploding loss/gradient (a full run went NaN at epoch 1011).
+    # Cap it at the data maximum; in-range values, which is all of them in normal training, are unchanged.
+    wfs_hat = min_max_norm(X_hat.clamp(max=1.0), wfs_min, wfs_max, '[0,1]', 'add')
     eps = 1e-10
     wfs_hat = (torch.pow(10, wfs_hat) - eps).permute(0, 2, 1)
     _, magnitude_hat = get_phase_mag(wfs_hat)
