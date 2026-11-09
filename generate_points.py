@@ -2,9 +2,13 @@
 Generate waveforms from a 100x100 grid (a sub-region in the SFBA) for simulating FAS maps
 '''
 
+import argparse
+import os
+
 import torch
 from model.dvae import *
 from argparse import Namespace
+from get_data import read_waveform_table
 from train_hyperopt import restore_checkpoint, TimeSpecConverter
 import numpy as np
 from itertools import product
@@ -156,7 +160,28 @@ def compute_angle(info):
     return angle
 
     
-data = pd.read_csv('/scratch/gm/data/Time_Series_Data_v5_EW.csv', header=None)
+parser = argparse.ArgumentParser(description='generate waveforms and their FAS on the FAS-map grid for one earthquake scenario')
+parser.add_argument('--path', default='/scratch/gm/data/',
+                    help='data directory (Time_Series_Data_v5_EW.csv or the DesignSafe release)')
+parser.add_argument('--ckpt', default='/scratch/gm/logs/GM_V2_VAE_data5_dist-5000_bs=128-rnn_size=32-z_dim=32-lr=0.0008-weight:kl=0.2-log_reg=True-w_decay=1e-05-w_len=160-h_len=46-ncond=16-tcondvar=2-seed=3407',
+                    help='model checkpoint; the architecture is parsed from its file name')
+parser.add_argument('--grid', default='./Non_Ergodic_Prediction_Matrix_Map_2Hz.csv',
+                    help='station grid: the non-ergodic GMM CSV (columns 0, 1 = lat, lon; cropped to the region below) or a '
+                         "directory with the authors' lat.npy and lon.npy (README Google Drive folder; already cropped)")
+# default scenario = the one active in the original script; the paper's Fig. 2 map is scenario 1 below:
+# --src_lat 37.86083 --src_lon -122.25667 --mag 3.84 --depth 7.94
+parser.add_argument('--src_lat', type=float, default=37.97817)
+parser.add_argument('--src_lon', type=float, default=-122.05350)
+parser.add_argument('--mag', type=float, default=2.93)
+parser.add_argument('--depth', type=float, default=15.28, help='source depth (km)')
+parser.add_argument('--n_gen', type=int, default=1, help='number of realizations (the paper maps are the median of 30)')
+parser.add_argument('--out_dir', default='.', help='output directory')
+args = parser.parse_args()
+if not os.path.isfile(args.ckpt):  # restore_checkpoint() would silently keep the untrained model
+    raise SystemExit(f'checkpoint not found: {args.ckpt}')
+os.makedirs(args.out_dir, exist_ok=True)
+
+data = read_waveform_table(args.path, 'EW')
 
 # assign names for the first 13 columns
 names = ["eid",    #"Event ID"
@@ -187,7 +212,7 @@ cond_var_dict = {0: ['mag', 'rup', 'angle'],
                  3: ['mag', 'depth'],
                  4: ['mag', 'rup', 'depth']}
 
-log_path = '/scratch/gm/logs/GM_V2_VAE_data5_dist-5000_bs=128-rnn_size=32-z_dim=32-lr=0.0008-weight:kl=0.2-log_reg=True-w_decay=1e-05-w_len=160-h_len=46-ncond=16-tcondvar=2-seed=3407'
+log_path = args.ckpt
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 parameter_names = ["rnn_size", "z_dim", "w_len", "h_len", "tcondvar", "ncond"]
@@ -252,9 +277,15 @@ print(norm_dict)
 
 # define a region
 region = [ -122.503491204439, -121.8, 37.2661695985203, 38.066565827788]
-non_ergs = pd.read_csv(f'./Non_Ergodic_Prediction_Matrix_Map_2Hz.csv', header=None) # load the non-ergodic GMM file
-sample_lat = non_ergs[0]
-sample_lon = non_ergs[1]
+grid_is_npy = os.path.isdir(args.grid)
+if grid_is_npy:
+    # the authors' published grid: the points inside the region, in the order of their maps (wfs_2.npy, non_erg_gmm.npy)
+    sample_lat = pd.Series(np.load(os.path.join(args.grid, 'lat.npy'), allow_pickle=False))
+    sample_lon = pd.Series(np.load(os.path.join(args.grid, 'lon.npy'), allow_pickle=False))
+else:
+    non_ergs = pd.read_csv(args.grid, header=None) # load the non-ergodic GMM file
+    sample_lat = non_ergs[0]
+    sample_lon = non_ergs[1]
 slat_idx = sample_lat[sample_lat.between(region[2], region[3])]
 slon_idx = sample_lon[sample_lon.between(region[0], region[1])]
 
@@ -263,7 +294,9 @@ for slon, slat in list(zip(sample_lon.tolist(), sample_lat.tolist())):
     station_lon.append(min_max_norm(slon, norm_dict['sta_lon'][0], norm_dict['sta_lon'][-1], '[0,1]', 'sub'))
     station_lat.append(min_max_norm(slat, norm_dict['sta_lat'][0], norm_dict['sta_lat'][-1], '[0,1]', 'sub'))
 
-good_idx = list(set(slat_idx.index.tolist()).intersection(slon_idx.index.tolist()))
+good_idx = sorted(set(slat_idx.index.tolist()).intersection(slon_idx.index.tolist()))
+if grid_is_npy:
+    good_idx = list(range(len(sample_lat)))  # already cropped; keep every point so rows match the published maps
 
 # scenario 1
 # chosen_lat, chosen_lon = 37.86083, -122.25667 #37.77333, -122.1898 #37.4910, -121.8290 #37.3757, -121.8261
@@ -275,8 +308,8 @@ good_idx = list(set(slat_idx.index.tolist()).intersection(slon_idx.index.tolist(
 # m, z = 3.98, 8.37
 # r = 8.147416
 
-chosen_lat, chosen_lon = 37.97817, -122.05350
-m, z = 2.93, 15.28
+chosen_lat, chosen_lon = args.src_lat, args.src_lon  # default: 37.97817, -122.05350
+m, z = args.mag, args.depth  # default: 2.93, 15.28
 # r = 8.147416
 
 # scenario 3
@@ -320,7 +353,8 @@ length = rand_select.shape[0]
 pred_wfss_sources = []
 from tqdm import tqdm
 
-for ngen in tqdm(range(1)):
+fas_gens = []
+for ngen in tqdm(range(args.n_gen)):
     pred_wfss = []
     batch_size = 50
     batch_ranges = length//batch_size+1
@@ -350,6 +384,12 @@ for ngen in tqdm(range(1)):
     Fourier_Amplitude_Array_proper_pred = fft_loop_abs[:, indices_one_sided]*delta_t
 
     Amplitude_Signal_Smoothed_loop_pred = KO98_smoothing(frequency_vector[indices_one_sided], Fourier_Amplitude_Array_proper_pred.T, 20)
-    np.save(f'./Gen_FAS_cond2.npy', Amplitude_Signal_Smoothed_loop_pred)
-    exit()
+    fas_gens.append(Amplitude_Signal_Smoothed_loop_pred)
+    if ngen == 0:
+        # waveforms of the first realization, in the format generate_fasmap.ipynb loads (wfs_{tcondvar}.npy)
+        np.save(os.path.join(args.out_dir, f'wfs_{tcondvar}.npy'), pred_wfss.astype(np.float32))
+
+# smoothed FAS (2-15 Hz) per grid point: [n_freq, n_points], or [n_gen, n_freq, n_points] for several realizations
+np.save(os.path.join(args.out_dir, f'Gen_FAS_cond{tcondvar}.npy'),
+        fas_gens[0] if args.n_gen == 1 else np.stack(fas_gens).astype(np.float32))
 
