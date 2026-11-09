@@ -34,9 +34,9 @@ def load_data(path, time_spec_converter, train_bs=32, test_bs=32, tcondvar=0):
     loc = 'EW'
 
     # customized load filtered data
-    data = pd.read_csv(path + f'Time_Series_Data_v5_{loc}.csv', header=None)
-    if os.path.exists(path + f'rand_idx_{loc}.npy'):
-        ridx = np.load(path + f'rand_idx_{loc}.npy')
+    data = read_waveform_table(path, loc)
+    if os.path.exists(os.path.join(path, f'rand_idx_{loc}.npy')):
+        ridx = np.load(os.path.join(path, f'rand_idx_{loc}.npy'))
         if len(ridx) == data.shape[0]:
             data = data.iloc[ridx]
 
@@ -118,6 +118,28 @@ def load_data(path, time_spec_converter, train_bs=32, test_bs=32, tcondvar=0):
     all_loader = DataLoader(TensorDataset(*[all_set[idx] for idx in range(4)]), batch_size=length, shuffle=False)
 
     return train_set, test_set, all_set, train_loader, test_loader, all_loader, norm_dict, time_serie_len
+
+
+def read_waveform_table(path, loc='EW', n_meta=14, n_samples=7000):
+    '''
+    Read the waveform table: n_meta metadata columns followed by n_samples waveform samples per row.
+
+    Accepts the authors' file (Time_Series_Data_v5_{loc}.csv) or the public DesignSafe release
+    (PRJ-4573, Time_Series_Data_DesignSafe_{loc}.csv). The public release has two extra leading
+    columns before the event ID; they are dropped so the layout matches the original file.
+    '''
+    fname = os.path.join(path, f'Time_Series_Data_v5_{loc}.csv')
+    if not os.path.exists(fname):
+        fname = os.path.join(path, f'Time_Series_Data_DesignSafe_{loc}.csv')
+    data = pd.read_csv(fname, header=None)
+
+    n_extra = data.shape[1] - (n_meta + n_samples)
+    if n_extra == 2:
+        data = data.iloc[:, 2:]
+    elif n_extra != 0:
+        raise ValueError(f'{fname}: expected {n_meta + n_samples} columns '
+                         f'(or {n_meta + n_samples + 2} for the DesignSafe release), found {data.shape[1]}')
+    return data
 
 
 def get_phase_mag(wfs):
