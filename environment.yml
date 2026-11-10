@@ -1,0 +1,27 @@
+# Conda environment for CGM-GM that installs every pin in requirements.txt.
+#
+# The README names Python 3.9.17, but requirements.txt pins pygmt 0.12.0 and scipy 1.14.0, which both need
+# Python >= 3.10, so it can't be installed on 3.9. Python 3.10 satisfies every pin. Python 3.12 doesn't, because
+# torch 2.0.1 and numpy 1.25.2 have no builds for it.
+#
+#   conda env create -f environment.yml
+#   conda activate cgm_gm
+#
+# GPUs: the PyPI builds of torch 2.0.1 and torchaudio 2.0.2 bundle CUDA 11.7. Newer GPUs that CUDA 11 doesn't
+# support, such as the Blackwell generation, need builds for CUDA 12.8, installed after creating the environment:
+#   pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+name: cgm_gm
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  # hyperopt 0.2.7 imports pkg_resources, which newer setuptools no longer provide (its warning says to pin < 81)
+  - setuptools<81
+  # PyGMT from conda-forge, which also installs the GMT library it needs (pip can't). Only generate_fasmap.ipynb
+  # uses it. numpy and pandas are pinned here as well, so that conda picks the versions requirements.txt asks for.
+  - pygmt=0.12.0
+  - numpy=1.25.2
+  - pandas=2.0.3
+  - pip:
+      - -r requirements.txt
