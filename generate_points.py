@@ -9,7 +9,7 @@ import torch
 from model.dvae import *
 from argparse import Namespace
 from get_data import read_waveform_table
-from train_hyperopt import restore_checkpoint, TimeSpecConverter
+from train_hyperopt import restore_checkpoint, TimeSpecConverter, GL_WINDOWS
 import numpy as np
 from itertools import product
 import pandas as pd
@@ -176,6 +176,9 @@ parser.add_argument('--mag', type=float, default=2.93)
 parser.add_argument('--depth', type=float, default=15.28, help='source depth (km)')
 parser.add_argument('--n_gen', type=int, default=1, help='number of realizations (the paper maps are the median of 30)')
 parser.add_argument('--out_dir', default='.', help='output directory')
+parser.add_argument('--gl_window', choices=['rect', 'hann'], default='rect',
+                    help="Griffin-Lim window: rect matches the model's spectrograms; hann is the original code's "
+                         'behaviour (about 1.8 times stronger FAS), most likely what the published figures used')
 args = parser.parse_args()
 if not os.path.isfile(args.ckpt):  # restore_checkpoint() would silently keep the untrained model
     raise SystemExit(f'checkpoint not found: {args.ckpt}')
@@ -358,7 +361,8 @@ for ngen in tqdm(range(args.n_gen)):
     pred_wfss = []
     batch_size = 50
     batch_ranges = length//batch_size+1
-    griffinlim = torchaudio.transforms.GriffinLim(n_fft=fft_size, n_iter=500, win_length=w_len, hop_length=h_len, power=1).to(device)
+    griffinlim = torchaudio.transforms.GriffinLim(n_fft=fft_size, n_iter=500, win_length=w_len, hop_length=h_len, power=1,
+                                                  window_fn=GL_WINDOWS[args.gl_window]).to(device)
     for idx in range(batch_ranges):
         with torch.no_grad():
             pred_wfs = best_model.module.generate(rand_select[idx*batch_size:(idx+1)*batch_size].to(device), SEQ_LEN)

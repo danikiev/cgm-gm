@@ -292,16 +292,24 @@ def restore_checkpoint(ckpt_dir, state, device='cuda:0'):
         return state
 
 
+# The STFTs below get no window, so they use a rectangular one. torchaudio's GriffinLim defaults to a Hann window,
+# which sums to half as much, so waveforms it recovers from these spectrograms come out too strong (on the recordings'
+# own spectrograms: FAS x1.8, PGV x1.3). 'rect' matches the spectrograms. 'hann' is the original code's behaviour and
+# most likely what the published figures used.
+GL_WINDOWS = {'rect': torch.ones, 'hann': torch.hann_window}
+
+
 class TimeSpecConverter:
-    def __init__(self, n_fft, w_len, h_len, power, device, n_iter=50):
+    def __init__(self, n_fft, w_len, h_len, power, device, n_iter=50, gl_window='rect'):
         self.n_fft = n_fft
         self.w_len = w_len
         self.h_len = h_len
         self.power = power
         self.n_iter = n_iter
         self.device = device
-        self.griffinlim = torchaudio.transforms.GriffinLim(n_fft=self.n_fft, n_iter=1000, win_length=self.w_len, 
-                                                           hop_length=self.h_len, power=self.power).to(self.device)
+        self.griffinlim = torchaudio.transforms.GriffinLim(n_fft=self.n_fft, n_iter=1000, win_length=self.w_len,
+                                                           hop_length=self.h_len, power=self.power,
+                                                           window_fn=GL_WINDOWS[gl_window]).to(self.device)
         
     def time_to_spec(self, wfs):
         return torch.stft(wfs, n_fft=self.n_fft, hop_length=self.h_len, win_length=self.w_len, return_complex=True)

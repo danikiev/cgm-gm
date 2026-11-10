@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from get_data import load_data, min_max_norm, get_phase_mag
 from model.dvae import *
-from train_hyperopt import TimeSpecConverter
+from train_hyperopt import TimeSpecConverter, GL_WINDOWS
 
 from utils.utils_vis import plt_ori_vs_gen, plt_ori_vs_rec
 from metrics.discrimanitive import discriminative_score_metrics
@@ -201,7 +201,8 @@ def eval(args):
 
     set_seed(args)
 
-    time_spec_converter = TimeSpecConverter(n_fft=fft_size, w_len=w_len, h_len=h_len, power=1, device=args.device)
+    time_spec_converter = TimeSpecConverter(n_fft=fft_size, w_len=w_len, h_len=h_len, power=1, device=args.device,
+                                            gl_window=args.gl_window)
 
     _, _, all_set, _, test_loader, all_loader, norm_dict, time_serie_len = load_data(args.path, time_spec_converter, train_bs=args.batch_size, tcondvar=tcondvar)
 
@@ -244,7 +245,8 @@ def main(args, mc=None):
         print('Loading data...')
         print('========================\n')
 
-        time_spec_converter = TimeSpecConverter(n_fft=fft_size, w_len=w_len, h_len=h_len, power=1, device=args.device)
+        time_spec_converter = TimeSpecConverter(n_fft=fft_size, w_len=w_len, h_len=h_len, power=1, device=args.device,
+                                                gl_window=args.gl_window)
         _, _, all_set, train_loader, test_loader, all_loader, norm_dict, time_serie_len = load_data(args.path, time_spec_converter, train_bs=args.batch_size, tcondvar=tcondvar)
 
         # setup the model
@@ -259,7 +261,8 @@ def main(args, mc=None):
         SEQ_LEN = time_serie_len//h_len + 1
         eps = 1e-10
         wfs_min, wfs_max = norm_dict['log_wfs']
-        griffinlim = torchaudio.transforms.GriffinLim(n_fft=fft_size, n_iter=500, win_length=w_len, hop_length=h_len, power=1).to(args.device)
+        griffinlim = torchaudio.transforms.GriffinLim(n_fft=fft_size, n_iter=500, win_length=w_len, hop_length=h_len, power=1,
+                                                      window_fn=GL_WINDOWS[args.gl_window]).to(args.device)
 
         model.eval()
         real_wfs_list, pred_wfs_list = [], []
@@ -333,6 +336,9 @@ if __name__ == '__main__':
     parser.add_argument('--h_len', type=int, default=46, help='hop length') 
     parser.add_argument('--power', type=int, default=1, help='power of the spectrogram')
     parser.add_argument('--fft_size', type=int, default=160, help='fft size')
+    parser.add_argument('--gl_window', choices=['rect', 'hann'], default='rect',
+                        help="Griffin-Lim window: rect matches the model's spectrograms; hann is the original code's "
+                             'behaviour, most likely what the published figures used')
 
     args = parser.parse_args()
     main(args)
