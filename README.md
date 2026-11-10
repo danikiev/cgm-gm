@@ -51,6 +51,7 @@ Below is an example of generated FAS maps in the San Francisco Bay Area.
 ├── README.md
 ├── LICENSE
 ├── requirements.txt
+├── environment.yml
 ├── get_data.py
 ├── train_hyperopt.py
 ├── test_best_model.py
@@ -93,14 +94,17 @@ The reported experiments were run on SUSE Linux Enterprise Server 15 SP5.
 
 ### Python environment
 
-This project was developed with Python 3.9.17.
-
-Install dependencies with:
+This project was developed with Python 3.9.17, but `pygmt` 0.12.0 and `scipy` 1.14.0, as pinned in `requirements.txt`, need Python 3.10 or newer. `environment.yml` creates a conda environment with Python 3.10 that installs every pin in `requirements.txt`, and takes PyGMT with its GMT library from conda-forge:
 
 ```bash
-conda create -n cgm_gm python=3.9.17
+conda env create -f environment.yml
 conda activate cgm_gm
-pip install -r requirements.txt
+```
+
+The PyPI builds of `torch` 2.0.1 and `torchaudio` 2.0.2 use CUDA 11.7 and run on GPU architectures up to `sm_86`, such as the A100 and the RTX A5000. Newer GPUs that CUDA 11 doesn't support, such as the Blackwell generation, need the CUDA 12.8 builds, installed into the environment afterwards:
+
+```bash
+pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 ```
 
 
